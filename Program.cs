@@ -1,3 +1,6 @@
+using HotChocolate.Language;
+using HotChocolate.Resolvers;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGraphQLServer()
@@ -14,13 +17,14 @@ app.Run();
 public class Query
 {
     /*
-    query {
-        human {
-            pets {
-                ... on Cat {
-                    sound
+    query{
+        human{
+            pets{
+                ... on Cat{
+                    __typename
                 }
-                ... on Dog {
+                ... on Dog{
+                    __typename
                     sound
                 }
             }
@@ -28,24 +32,25 @@ public class Query
     }
     */
 
-    public Human GetHuman(
-        [IsSelected("pets")] bool petsIsSelected // true
-        , [IsSelected("pets { sound }")] bool soundOnPetIsSelected // false
-        , [IsSelected(
-            """
-            pets {
-              ... on Cat {
-                sound
-              }
-              ... on Dog {
-                sound
-              }
-            }
-            """)]
-        bool soundOnFragmentIsSelected // The type condition `Cat` of the inline fragment is not assignable from the parent field type `IPet`.
-    )
+    public Human GetHuman(IResolverContext context)
     {
+        var soundIsSelected = (bool)context.GetSelections((ObjectType)context.Selection.Type.NamedType())
+            .FirstOrDefault(f => f.Field.Name.Equals("pets"))?.SelectionSet?.Selections.Any(
+                x =>
+                {
+                    var fields = (x as InlineFragmentNode)?.SelectionSet.Selections.OfType<FieldNode>() ??
+                                 Array.Empty<FieldNode>();
+                    return fields.Any(f => f.Name.Value.Equals("sound"));
+                });
+
+        Console.WriteLine($"result: {soundIsSelected}");
         return new Human { Pets = [new Cat(), new Dog()] };
+    }
+
+    public IPet GetPet([IsSelected("sound")] bool soundIsSelected)
+    {
+        Console.WriteLine($"result: {soundIsSelected}");
+        return new Cat();
     }
 }
 
